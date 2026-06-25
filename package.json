@@ -1,0 +1,15 @@
+{
+  "name": "pausa-hidratacao",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lembrete de hidratacao com tema de placar esportivo.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check public/app-utils.js && node --check public/app.js && node --check server.js",
+    "test": "npm run check && node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
