@@ -1,5 +1,3 @@
-/* Pausa Hidratação — global resets and shared animations.
-   Component styling lives inline in app.js (ported from the Claude Design source). */
 
 * {
   box-sizing: border-box;
@@ -78,7 +76,26 @@ input[type="range"] {
   }
 }
 
-/* On narrow screens, collapse the sticky sidebar into a normal top bar. */
+@keyframes hbConfetti {
+  0% {
+    transform: translateY(-10vh) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(105vh) translateX(var(--hb-drift, 0px)) rotate(720deg);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-confetti] {
+    display: none;
+  }
+}
+
 @media (max-width: 760px) {
   #app > div {
     flex-direction: column;

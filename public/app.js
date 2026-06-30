@@ -24,6 +24,7 @@
       notif: "Notificações do sistema", notifSub: "Aviso mesmo em outra aba", concluir: "Concluir", minUnit: "min",
       idioma: "Idioma", temaEscuro: "Tema escuro", temaClaro: "Tema claro",
       msgVazio: "Bora começar a beber água!", msgLento: "Que tal acelerar um pouco?", msgBom: "Bom ritmo, continue assim.", msgQuase: "Quase lá, falta pouco!", msgBatida: "Meta batida! 🎉",
+      zerarHoje: "Zerar meta de hoje",
       locale: "pt-BR"
     },
     en: {
@@ -42,6 +43,7 @@
       notif: "System notifications", notifSub: "Alerts even on another tab", concluir: "Done", minUnit: "min",
       idioma: "Language", temaEscuro: "Dark theme", temaClaro: "Light theme",
       msgVazio: "Let's start drinking water!", msgLento: "How about speeding up a bit?", msgBom: "Good pace, keep it up.", msgQuase: "Almost there, just a bit more!", msgBatida: "Goal reached! 🎉",
+      zerarHoje: "Reset today's goal",
       locale: "en-US"
     }
   };
@@ -127,7 +129,6 @@
       };
     }
 
-    // Hybrid migration: bring forward data from the previous app schema (pausa-hidratacao:v1).
     return migrateFromLegacy();
   }
 
@@ -154,7 +155,7 @@
         base.days = migrateLegacyDays(legacy.history, servingMl);
       }
     } catch (error) {
-      // Ignore corrupted legacy storage and start fresh.
+
     }
 
     return base;
@@ -177,7 +178,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme, lang, intervalMin, glassMl, goalMl, days, soundOn, notifOn }));
     } catch (error) {
-      // Storage may be unavailable (private mode); ignore.
+
     }
   }
 
@@ -188,8 +189,6 @@
     if (typeof options.after === "function") options.after();
   }
 
-  // --- Timer ---------------------------------------------------------------
-
   function tick() {
     if (!state.running || state.alertOpen) return;
     const next = (state.remaining || 0) - 1;
@@ -197,6 +196,19 @@
       triggerAlert();
     } else {
       state.remaining = next;
+
+      updateTimerNodes();
+    }
+  }
+
+  function updateTimerNodes() {
+    const vm = buildViewModel();
+    const countdown = document.querySelector("[data-countdown]");
+    const ring = document.querySelector("[data-ring-progress]");
+    if (countdown) countdown.textContent = vm.timeStr;
+    if (ring) ring.setAttribute("stroke-dashoffset", vm.ringOffset);
+    if (!countdown || !ring) {
+
       render();
     }
   }
@@ -241,15 +253,24 @@
     setState(patch);
   }
 
-  // --- Water log -----------------------------------------------------------
+  function consumedToday(days) {
+    const key = dayKey(new Date());
+    const entries = (days && days[key] && days[key].entries) || [];
+    return entries.reduce((sum, entry) => sum + (entry.ml || 0), 0);
+  }
 
   function addWater(after) {
     const key = dayKey(new Date());
+    const goal = state.goalMl || 2000;
+    const before = consumedToday(state.days);
     const days = Object.assign({}, state.days);
     const existing = days[key] ? { entries: (days[key].entries || []).slice() } : { entries: [] };
     existing.entries.push({ ts: Date.now(), ml: state.glassMl });
     days[key] = existing;
+
+    const justReached = before < goal && consumedToday(days) >= goal;
     setState({ days }, { after });
+    if (justReached) celebrate();
   }
 
   function confirmDrink() {
@@ -263,14 +284,21 @@
     setState({ alertOpen: false, running: true, paused: false, remaining: 300, totalSec: 300 });
   }
 
-  // --- Settings ------------------------------------------------------------
-
   function setGlass(value) {
     setState({ glassMl: Math.max(50, Number(value) || 50) });
   }
 
   function setGoal(value) {
     setState({ goalMl: Math.max(250, Number(value) || 250) });
+  }
+
+  function resetTodayProgress() {
+
+    const key = dayKey(new Date());
+    if (!state.days || !state.days[key]) return;
+    const days = Object.assign({}, state.days);
+    delete days[key];
+    setState({ days });
   }
 
   function toggleSound() {
@@ -302,8 +330,6 @@
     setState({ activePage: page }, { save: false });
   }
 
-  // --- Audio / notifications ----------------------------------------------
-
   function notify() {
     if (!state.notifOn) return;
     const L = T_STR[state.lang] || T_STR.pt;
@@ -315,7 +341,7 @@
         });
       }
     } catch (error) {
-      // Notifications unsupported; ignore.
+
     }
   }
 
@@ -342,11 +368,73 @@
         oscillator.stop(at + 0.16);
       });
     } catch (error) {
-      // Audio unsupported; ignore.
+
     }
   }
 
-  // --- Derived view model --------------------------------------------------
+  function fanfare() {
+    if (!state.soundOn) return;
+    try {
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) return;
+      if (!audioContext) audioContext = new AudioContextCtor();
+      if (audioContext.state === "suspended") audioContext.resume();
+      const now = audioContext.currentTime;
+
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((frequency, index) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = "triangle";
+        oscillator.frequency.value = frequency;
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        const at = now + index * 0.13;
+        const dur = index === notes.length - 1 ? 0.45 : 0.18;
+        gain.gain.setValueAtTime(0, at);
+        gain.gain.linearRampToValueAtTime(0.25, at + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, at + dur);
+        oscillator.start(at);
+        oscillator.stop(at + dur + 0.02);
+      });
+    } catch (error) {
+
+    }
+  }
+
+  function celebrate() {
+    fanfare();
+    if (typeof document === "undefined" || !document.body) return;
+
+    const colors = ["#2F5BFF", "#12B069", "#5B7DFF", "#5BDC99", "#27C779", "#8DA9FF"];
+    const layer = document.createElement("div");
+    layer.setAttribute("data-confetti", "");
+    layer.style.cssText = "position:fixed;inset:0;z-index:1200;pointer-events:none;overflow:hidden;";
+
+    const count = 90;
+    for (let i = 0; i < count; i += 1) {
+      const piece = document.createElement("div");
+      const color = colors[i % colors.length];
+      const left = Math.random() * 100;
+      const size = 7 + Math.random() * 7;
+      const delay = Math.random() * 0.5;
+      const duration = 2.2 + Math.random() * 1.6;
+      const drift = (Math.random() * 2 - 1) * 60;
+      const rounded = Math.random() > 0.5 ? "50%" : "2px";
+      piece.style.cssText =
+        "position:absolute;top:-24px;left:" + left + "%;" +
+        "width:" + size + "px;height:" + (size * (0.6 + Math.random() * 0.8)) + "px;" +
+        "background:" + color + ";border-radius:" + rounded + ";opacity:0;" +
+        "--hb-drift:" + drift + "px;" +
+        "animation:hbConfetti " + duration + "s cubic-bezier(.25,.6,.4,1) " + delay + "s forwards;";
+      layer.appendChild(piece);
+    }
+
+    document.body.appendChild(layer);
+    window.setTimeout(() => {
+      if (layer.parentNode) layer.parentNode.removeChild(layer);
+    }, 4200);
+  }
 
   function buildViewModel() {
     const theme = THEMES[state.theme] || THEMES.placar;
@@ -394,7 +482,6 @@
 
     const dateLabel = new Date().toLocaleDateString(locale, { weekday: "long", day: "2-digit", month: "long" });
 
-    // Mascot face reacts to progress.
     const mfrac = goalPct / 100;
     const waterY = (14 + (1 - mfrac) * 104).toFixed(1);
     const waveD = `M-15 ${waterY} q12 -7 24 0 t24 0 t24 0 t24 0 t24 0 t24 0 V132 H-15 Z`;
@@ -480,8 +567,6 @@
     };
   }
 
-  // --- DOM helpers ---------------------------------------------------------
-
   function el(tag, attrs = {}, children = []) {
     const node = document.createElement(tag);
     Object.entries(attrs).forEach(([key, value]) => {
@@ -539,15 +624,13 @@
     return active ? base + "background:#2F5BFF;color:#fff;box-shadow:0 6px 14px rgba(47,91,255,.3);" : base;
   }
 
-  // --- Render --------------------------------------------------------------
-
   const ICONS = {
     drop: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.5 4 6 7 6 10a6 6 0 0 1-12 0c0-3 2.5-6 6-10z"/></svg>',
     home: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7M6 10v10h12V10"/></svg>',
     chart: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg>',
     moon: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
     sun: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
-    gear: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2l1.4 2.8 3.1-.7.7 3.1L20 10l-2.8 1.8.7 3.1-3.1.7L12 19l-1.8-2.4-3.1.7.7-3.1L5 12l2.5-1.8-.7-3.1 3.1.7z"/></svg>',
+    gear: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     plus: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
     dropSmall: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 3c3.5 4 6 7 6 10a6 6 0 0 1-12 0c0-3 2.5-6 6-10z"/></svg>',
     play: '<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M7 4.5l13 7.5-13 7.5z"/></svg>',
@@ -560,10 +643,16 @@
 
   function renderSidebar(vm) {
     const t = vm.theme;
-    const logo = el("div", { style: "width:42px;height:42px;border-radius:13px;background:linear-gradient(150deg,#2F5BFF,#12B069);display:grid;place-items:center;box-shadow:0 8px 18px rgba(47,91,255,.28);" }, [svg(ICONS.drop)]);
+    const logo = el("img", {
+      src: "logo.png",
+      alt: "Hydration Break",
+      width: "56",
+      height: "56",
+      style: "width:56px;height:56px;border-radius:16px;object-fit:cover;box-shadow:0 8px 18px rgba(47,91,255,.28);"
+    });
     const brand = el("div", { style: "display:flex;flex-direction:column;gap:1px;" }, [
-      el("span", { style: `font-family:'Sora',sans-serif;font-weight:800;font-size:16px;letter-spacing:-.02em;color:${t.ink};`, text: vm.L.brandTop }),
-      el("span", { style: "font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#5B7DFF;", text: vm.L.brandSub })
+      el("span", { style: `font-family:'Sora',sans-serif;font-weight:800;font-size:16px;letter-spacing:-.02em;color:${t.ink};`, text: "Hydration" }),
+      el("span", { style: "font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#5B7DFF;", text: "Break" })
     ]);
     const header = el("div", { style: "display:flex;align-items:center;gap:12px;padding:4px 6px 18px;" }, [logo, brand]);
 
@@ -646,7 +735,11 @@
       document.createTextNode(" " + vm.countRest)
     ]);
     countRow.appendChild(countText);
-    const action = el("div", { style: "flex:0 0 auto;display:flex;flex-direction:column;gap:10px;width:230px;min-width:200px;" }, [addBtn, countRow]);
+    const resetTodayBtn = el("button", { style: `display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:9px;border:1px solid ${t.chipBorder};border-radius:11px;background:transparent;color:${t.inkMuted};font-weight:600;font-size:13px;cursor:pointer;transition:all .15s;`, onclick: resetTodayProgress, title: vm.L.zerarHoje }, [
+      svg(ICONS.reset.replace(/width="18" height="18"/, 'width="15" height="15"')),
+      document.createTextNode(" " + vm.L.zerarHoje)
+    ]);
+    const action = el("div", { style: "flex:0 0 auto;display:flex;flex-direction:column;gap:10px;width:230px;min-width:200px;" }, [addBtn, countRow, resetTodayBtn]);
 
     return el("section", { style: `background:${t.panelCard};border:${t.panelBorder};border-radius:24px;padding:26px 28px;box-shadow:${t.shadowCard};display:flex;align-items:center;gap:28px;flex-wrap:wrap;transition:all .35s ease;` }, [mascot, info, action]);
   }
@@ -655,13 +748,15 @@
     const t = vm.theme;
     const ringSvg = `<svg width="260" height="260" viewBox="0 0 300 300" style="transform:rotate(-90deg);">
       <circle cx="150" cy="150" r="132" fill="none" stroke="${t.ringTrack}" stroke-width="16"/>
-      <circle cx="150" cy="150" r="132" fill="none" stroke="${t.ringColor}" stroke-width="16" stroke-linecap="round" stroke-dasharray="${vm.ringCirc}" stroke-dashoffset="${vm.ringOffset}" style="transition:stroke-dashoffset 1s linear,stroke .35s ease;"/>
+      <circle data-ring-progress cx="150" cy="150" r="132" fill="none" stroke="${t.ringColor}" stroke-width="16" stroke-linecap="round" stroke-dasharray="${vm.ringCirc}" stroke-dashoffset="${vm.ringOffset}" style="transition:stroke-dashoffset 1s linear,stroke .35s ease;"/>
     </svg>`;
     const ringWrap = el("div", { style: "position:relative;width:260px;height:260px;flex:0 0 auto;" });
     ringWrap.innerHTML = ringSvg;
+    const countdownNode = el("span", { style: `font-family:'JetBrains Mono',monospace;font-weight:700;font-size:52px;line-height:1;color:${t.digitColor};text-shadow:${t.digitGlow};font-variant-numeric:tabular-nums;`, text: vm.timeStr });
+    countdownNode.setAttribute("data-countdown", "");
     ringWrap.appendChild(el("div", { style: "position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;" }, [
       el("span", { style: `font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${t.inkMuted};`, text: vm.L.proxPausa }),
-      el("span", { style: `font-family:'JetBrains Mono',monospace;font-weight:700;font-size:52px;line-height:1;color:${t.digitColor};text-shadow:${t.digitGlow};font-variant-numeric:tabular-nums;`, text: vm.timeStr }),
+      countdownNode,
       el("span", { style: `font-size:12px;color:${t.inkMuted};`, text: vm.aCadaLabel })
     ]));
 
@@ -756,13 +851,12 @@
       svg(ICONS.check), document.createTextNode(" " + vm.L.bebiAgua)
     ]);
     const snoozeBtn = el("button", { style: "width:100%;padding:13px;border-radius:14px;background:#F4F6FA;border:1px solid #DCE2EC;color:#344054;font-weight:600;font-size:15px;cursor:pointer;", onclick: snooze, text: vm.L.adiar });
-    const card = el("div", { style: "width:min(420px,100%);background:#fff;border-radius:28px;padding:34px 30px;text-align:center;box-shadow:0 30px 70px rgba(0,0,0,.42);animation:hbPop .28s cubic-bezier(.34,1.56,.64,1);" }, [
+    return el("div", { style: "width:min(420px,100%);background:#fff;border-radius:28px;padding:34px 30px;text-align:center;box-shadow:0 30px 70px rgba(0,0,0,.42);" }, [
       drop,
       el("h2", { style: "margin:0 0 8px;font-family:'Sora',sans-serif;font-weight:800;font-size:26px;color:#131A24;letter-spacing:-.02em;", text: vm.L.alertTitle }),
       el("p", { style: "margin:0 0 24px;font-size:15px;color:#697586;line-height:1.5;", text: vm.alertBody }),
       el("div", { style: "display:flex;flex-direction:column;gap:10px;" }, [confirmBtn, snoozeBtn])
     ]);
-    return el("div", { role: "dialog", "aria-modal": "true", style: "position:fixed;inset:0;z-index:1100;background:rgba(11,15,21,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;animation:hbFade .2s ease;" }, [card]);
   }
 
   function renderSettings(vm) {
@@ -831,11 +925,27 @@
 
     const doneBtn = el("button", { style: "width:100%;padding:13px;border:none;border-radius:14px;background:#2F5BFF;color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 8px 18px rgba(47,91,255,.3);", onclick: close, text: vm.L.concluir });
 
-    const panel = el("div", { style: "width:min(460px,100%);max-height:88vh;overflow-y:auto;background:#fff;border-radius:26px;padding:28px;box-shadow:0 30px 70px rgba(0,0,0,.42);animation:hbPop .25s cubic-bezier(.34,1.56,.64,1);display:flex;flex-direction:column;gap:22px;", onclick: (event) => event.stopPropagation() }, [
+    return el("div", { style: "width:min(460px,100%);max-height:88vh;overflow-y:auto;background:#fff;border-radius:26px;padding:28px;box-shadow:0 30px 70px rgba(0,0,0,.42);display:flex;flex-direction:column;gap:22px;", onclick: (event) => event.stopPropagation() }, [
       header, langBlock, intervalBlock, glassBlock, goalBlock, soundBlock, notifBlock, doneBtn
     ]);
+  }
 
-    return el("div", { style: "position:fixed;inset:0;z-index:1100;background:rgba(11,15,21,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;animation:hbFade .2s ease;", onclick: close }, [panel]);
+  let shellContainer = null;
+  let overlayContainer = null;
+  let overlayKind = "none";
+  let overlayPanel = null;
+
+  function mountOverlayShell(kind, onBackdrop) {
+
+    const wrapper = el("div", { style: "animation:hbPop .25s cubic-bezier(.34,1.56,.64,1);" });
+    const backdropStyle = "position:fixed;inset:0;z-index:1100;background:rgba(11,15,21,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;animation:hbFade .2s ease;";
+    const attrs = { style: backdropStyle };
+    if (onBackdrop) attrs.onclick = onBackdrop;
+    if (kind === "alert") { attrs.role = "dialog"; attrs["aria-modal"] = "true"; }
+    const backdrop = el("div", attrs, [wrapper]);
+    overlayContainer.replaceChildren(backdrop);
+    overlayKind = kind;
+    overlayPanel = wrapper;
   }
 
   function render() {
@@ -845,9 +955,17 @@
     if (!appRoot) return;
 
     document.documentElement.lang = vm.L.locale;
-    document.title = vm.L.brandTop + " " + vm.L.brandSub;
+    document.title = "Hydration Break";
     document.body.style.background = t.page;
     document.body.style.color = t.ink;
+
+    if (!shellContainer || shellContainer.parentNode !== appRoot) {
+      shellContainer = el("div");
+      overlayContainer = el("div");
+      overlayKind = "none";
+      overlayPanel = null;
+      appRoot.replaceChildren(shellContainer, overlayContainer);
+    }
 
     const main = el("main", { style: "flex:1;min-width:0;padding:30px 30px 48px;display:flex;flex-direction:column;gap:20px;" });
     main.appendChild(el("div", { style: "display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;" }, [
@@ -864,10 +982,25 @@
     main.appendChild(el("p", { style: `text-align:center;font-size:12px;color:${t.inkMuted};margin:4px 0 0;`, text: vm.L.footer }));
 
     const shell = el("div", { style: "display:flex;min-height:100vh;font-family:'Plus Jakarta Sans',system-ui,sans-serif;transition:background .35s ease,color .35s ease;" }, [renderSidebar(vm), main]);
+    shellContainer.replaceChildren(shell);
 
-    appRoot.replaceChildren(shell);
-    if (vm.alertOpen) appRoot.appendChild(renderAlert(vm));
-    if (vm.settingsOpen) appRoot.appendChild(renderSettings(vm));
+    const wantKind = vm.alertOpen ? "alert" : (vm.settingsOpen ? "settings" : "none");
+    if (wantKind === "none") {
+      if (overlayKind !== "none") {
+        overlayContainer.replaceChildren();
+        overlayKind = "none";
+        overlayPanel = null;
+      }
+    } else {
+      if (overlayKind !== wantKind) {
+        const onBackdrop = wantKind === "settings"
+          ? () => setState({ settingsOpen: false }, { save: false })
+          : null;
+        mountOverlayShell(wantKind, onBackdrop);
+      }
+      const content = wantKind === "alert" ? renderAlert(vm) : renderSettings(vm);
+      overlayPanel.replaceChildren(content);
+    }
   }
 
   function boot() {
