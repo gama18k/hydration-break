@@ -186,6 +186,23 @@
     return typeof value === "boolean" ? value : fallback;
   }
 
+  function migrateLegacyDays(legacyHistory, servingMl) {
+    const normalized = normalizeHistory(legacyHistory);
+    const safeServingMl = clamp(Number(servingMl), 50, 2000);
+    return Object.entries(normalized).reduce((days, [date, count]) => {
+      const [year, month, day] = date.split("-").map(Number);
+      const entries = [];
+      for (let index = 0; index < count; index += 1) {
+        // Spread the synthetic timestamps across the day so the history list keeps a stable order.
+        const minutes = Math.min(1439, Math.round((index * 1440) / Math.max(1, count)));
+        const ts = new Date(year, month - 1, day, Math.floor(minutes / 60), minutes % 60).getTime();
+        entries.push({ ts, ml: safeServingMl });
+      }
+      days[date] = { entries };
+      return days;
+    }, {});
+  }
+
   function isPlainObject(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
   }
@@ -197,6 +214,7 @@
     formatMs,
     formatVolume,
     getGoalProgress,
+    migrateLegacyDays,
     minutesToMs,
     normalizeHistory,
     normalizeState,

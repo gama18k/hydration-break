@@ -3,143 +3,15 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Pausa da Hidratação</title>
-    <link rel="stylesheet" href="styles.css?v=7">
+    <title>Pausa Hidratação</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=8">
   </head>
   <body>
-    <main class="app-shell">
-      <section class="hero-section" id="inicio" aria-labelledby="app-title">
-        <div class="hero-copy card">
-          <h1 id="app-title" aria-label="Pausa da Hidratação">
-            <span>PAUSA DA</span>
-            <span>HIDRATAÇÃO</span>
-          </h1>
-          <p class="subtitle" data-i18n="subtitle">
-            Um lembrete com clima de jogo para você beber água no tempo certo e manter o foco!
-          </p>
-          <div class="hero-interval field">
-            <label for="intervalInput" data-i18n="intervalLabel">Intervalo a cada</label>
-            <div class="interval-row">
-              <input class="interval-hidden-input" id="intervalInput" type="number" min="1" max="240" step="1" inputmode="numeric">
-              <div class="preset-minutes" id="presetMinutes" aria-label="Atalhos de minutos">
-                <button type="button" data-minutes="2">2 min</button>
-                <button type="button" data-minutes="5">5 min</button>
-                <button type="button" data-minutes="10">10 min</button>
-                <button type="button" data-minutes="15">15 min</button>
-                <button type="button" data-minutes="20">20 min</button>
-                <button type="button" data-minutes="30">30 min</button>
-              </div>
-            </div>
-          </div>
-          <div class="hero-visual" aria-hidden="true">
-            <div class="shield-badge"><span class="drop"></span></div>
-          </div>
-        </div>
-
-        <section class="timer-board" aria-label="Timer da pausa de hidratação" aria-live="polite">
-          <div class="quick-controls" aria-label="Atalhos">
-            <label class="switch icon-switch sound-tool" aria-label="Som" title="Som">
-              <input id="soundToggle" type="checkbox">
-              <span aria-hidden="true"></span>
-              <strong data-i18n="sound">Som</strong>
-            </label>
-            <label class="switch icon-switch notification-tool" aria-label="Notificações" title="Notificações">
-              <input id="notificationToggle" type="checkbox">
-              <span aria-hidden="true"></span>
-              <strong data-i18n="systemNotification">Notificações</strong>
-            </label>
-            <button class="language-toggle" id="localeToggle" type="button" aria-label="Idioma: Português" title="Idioma">
-              <span aria-hidden="true">🇧🇷</span>
-            </button>
-            <select class="visually-hidden" id="localeSelect" aria-label="Idioma">
-              <option value="pt-BR">Português</option>
-              <option value="en">English</option>
-            </select>
-          </div>
-          <div class="countdown" id="countdown">02:00</div>
-          <p class="status" id="statusText" data-i18n="readyStatus">Pronto para começar!</p>
-          <p class="next-alert" id="nextAlertText" hidden></p>
-          <div class="actions timer-actions" aria-label="Controles da pausa hidratação">
-            <button class="primary" id="startButton" type="button" data-i18n="start">Iniciar</button>
-            <button id="pauseButton" type="button" data-i18n="pause">Pausar</button>
-            <button id="resetButton" type="button" data-i18n="reset">Resetar</button>
-          </div>
-        </section>
-      </section>
-
-      <section class="stats-band" id="estatisticas" aria-label="Estatísticas de hidratação">
-        <article class="stat progress-card">
-          <div class="section-heading">
-            <span class="heading-icon" aria-hidden="true"></span>
-            <h2 data-i18n="dailyProgress">Progresso de Hidratação</h2>
-          </div>
-
-          <div class="progress-layout">
-            <div class="progress-ring" id="progressRing" aria-hidden="true">
-              <div>
-                <span class="drop" aria-hidden="true"></span>
-                <strong id="todayCount">0 ml</strong>
-              </div>
-            </div>
-            <div class="goal-details">
-              <span data-i18n="dailyGoal">Meta diária</span>
-              <strong id="dailyGoalCount">2 L</strong>
-              <ul class="goal-breakdown" aria-label="Resumo da hidratação diária">
-                <li><span data-i18n="alreadyDrank">Já tomou</span><strong id="dailyConsumedCount">0 ml</strong></li>
-                <li><span data-i18n="remaining">Faltam</span><strong id="dailyRemainingCount">2 L</strong></li>
-              </ul>
-              <small id="goalStatus">0 ml de 2 L confirmados</small>
-            </div>
-          </div>
-
-          <div class="goal-progress" aria-hidden="true">
-            <span id="goalProgressBar"></span>
-          </div>
-          <p class="goal-percent" id="goalPercentText">0% da meta diária concluída</p>
-
-          <div class="goal-controls">
-            <label class="goal-control" for="dailyGoalInput">
-              <span data-i18n="dailyGoal">Meta diária</span>
-              <input id="dailyGoalInput" type="number" min="250" max="10000" step="50" inputmode="numeric">
-              <small>ml</small>
-            </label>
-            <label class="goal-control" for="servingInput">
-              <span data-i18n="servingAmount">Por água</span>
-              <input id="servingInput" type="number" min="50" max="2000" step="50" inputmode="numeric">
-              <small>ml</small>
-            </label>
-          </div>
-        </article>
-
-        <article class="stat history-card" id="historico">
-          <div class="section-heading">
-            <span class="heading-icon trophy-icon" aria-hidden="true"></span>
-            <h2 data-i18n="recentHistory">Histórico Recente</h2>
-            <a href="#historico"><span data-i18n="viewFullHistory">Ver histórico completo</span> →</a>
-          </div>
-          <ol id="historyList"></ol>
-        </article>
-      </section>
-
-      <p class="stadium-quote" id="dicas" data-i18n="quote">
-        Hidratação é performance. Beba água, jogue melhor, viva mais!
-      </p>
-    </main>
-
-    <div class="modal-backdrop" id="hydrationModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalMessage" tabindex="-1" hidden>
-      <div class="modal">
-        <div class="whistle" aria-hidden="true">!</div>
-        <p class="eyebrow" data-i18n="technicalBreak">Intervalo técnico</p>
-        <h2 id="modalTitle" data-i18n="modalTitle">Pausa hidratação!</h2>
-        <p id="modalMessage" data-i18n="modalMessage">Hora de beber água e voltar para o segundo tempo.</p>
-        <div class="modal-actions">
-          <button class="primary" id="drankButton" type="button" data-i18n="drank">Bebi água</button>
-          <button id="snoozeButton" type="button" data-i18n="snooze">Adiar 5 min</button>
-        </div>
-      </div>
-    </div>
-
-    <script src="app-utils.js?v=3"></script>
-    <script src="app.js?v=15"></script>
+    <div id="app"></div>
+    <script src="app-utils.js?v=4"></script>
+    <script src="app.js?v=16"></script>
   </body>
 </html>

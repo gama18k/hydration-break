@@ -8,6 +8,7 @@ const {
   formatMs,
   formatVolume,
   getGoalProgress,
+  migrateLegacyDays,
   minutesToMs,
   normalizeHistory,
   normalizeState,
@@ -269,6 +270,23 @@ test("getGoalProgress normalizes invalid values", () => {
     percentage: 0,
     isComplete: false
   });
+});
+
+test("migrateLegacyDays expands legacy daily counts into timestamped entries", () => {
+  const days = migrateLegacyDays({ "2026-06-24": 3, "invalid": 5, "2026-06-25": 0 }, 250);
+  const keys = Object.keys(days).sort();
+  assert.deepEqual(keys, ["2026-06-24"]);
+  assert.equal(days["2026-06-24"].entries.length, 3);
+  days["2026-06-24"].entries.forEach((entry) => {
+    assert.equal(entry.ml, 250);
+    assert.equal(typeof entry.ts, "number");
+    assert.equal(new Date(entry.ts).getFullYear(), 2026);
+  });
+});
+
+test("migrateLegacyDays clamps the serving volume to the supported range", () => {
+  const days = migrateLegacyDays({ "2026-06-24": 1 }, 5);
+  assert.equal(days["2026-06-24"].entries[0].ml, 50);
 });
 
 test("formatVolume displays milliliters and liters", () => {
