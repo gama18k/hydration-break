@@ -22,7 +22,7 @@ const {
 
 const defaultState = {
   locale: "pt-BR",
-  intervalMinutes: 30,
+  intervalMinutes: 40,
   dailyGoalMl: 2000,
   servingMl: 250,
   soundEnabled: true,
